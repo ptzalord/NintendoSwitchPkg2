@@ -5,6 +5,38 @@ Capable to boot something from SD card. If you have a Linux kernel with EFI stub
 
 ACPI also boots Windows and Linux, but limited devices are provided (only CPU at this moment).
 
+## Windows on ARM64 support matrix (firmware side)
+
+| Area | Status | Notes |
+| --- | --- | --- |
+| CPU/GIC/Arch Timer | ✅ Implemented | ACPI MADT/GTDT + CPU devices exposed. |
+| GOP framebuffer | ✅ Implemented | Simple framebuffer path. |
+| SD (SDMMC1) | ⚠️ Partial | Boot/runtime paths exist; requires further hardware validation under Windows. |
+| eMMC | 🚧 Not exposed for Windows use | Keep blocked until full validation. |
+| USB host (EHCI) | ⚠️ Experimental | Enumeration support exists but should be considered bring-up quality. |
+| Input buttons/Joy-Con | ⚠️ Partial | Sideband path is present; not full Windows input stack. |
+| Audio / Wi-Fi / BT / GPU accel | ❌ External blocker | Requires dedicated Windows ARM64 drivers. |
+
+## Known Windows blockers (external driver projects)
+
+- Tegra XUSB/XHCI quality host stack for stable Windows runtime USB.
+- Audio (I2S/HDA path) and codec integration.
+- Wi-Fi/Bluetooth combo device stack and power-state integration.
+- Full input stack (Joy-Con, sensors, dock events).
+- Thermal/fan policy integration with Windows power management.
+
+## Overclocking safety policy
+
+- Default remains **stock clocks/voltage behavior**.
+- No arbitrary runtime overclock register writes are exposed from UEFI.
+- Any future overclock profiles must be opt-in, bounded, thermally gated, and validated with safe rollback/recovery.
+
+## Recovery
+
+- If boot becomes unstable, clear/reset UEFI variables and restore a known-good firmware image.
+- Reboot to a known-good payload (for example Linux) to recover files and reflash.
+- Do not keep unstable clocks/voltage settings; return to stock before further testing.
+
 ## Device Support
 - CPU services: GIC and Arch Timer.
 - Clocks (reset, PLL, etc.)
@@ -73,4 +105,3 @@ Plug in connector on the right-side Joy Con and connect to PC. Use WinDbg serial
 - Fail0verflow for making the shofel2 exploit and Switch Coreboot sources.
 
 - The entirety of the Switch modding team for making this possible.
-

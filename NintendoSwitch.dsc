@@ -252,7 +252,6 @@
   gEfiMdeModulePkgTokenSpaceGuid.PcdBootManagerMenuFile|{ 0x21, 0xaa, 0x2c, 0x46, 0x14, 0x76, 0x03, 0x45, 0x83, 0x6e, 0x8a, 0xb6, 0xf4, 0x66, 0x23, 0x31 }
   gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut|3
 
-  gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor|L"Nintendo Switch AArch64 UEFI"
   # According to TRM
   # This no longer presents. Just know it is sufficient.
   # gEmbeddedTokenSpaceGuid.PcdPrePiCpuMemorySize|34
@@ -279,10 +278,6 @@
   # ACPI predates the AARCH64 architecture by 5 versions, so
   # we only target OSes that support ACPI v5.0 or later
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiExposedTableVersions|0x20
-
-  ## If TRUE, Graphics Output Protocol will be installed on virtual handle created by ConsplitterDxe.
-  #  It could be set FALSE to save size.
-  gEfiMdeModulePkgTokenSpaceGuid.PcdConOutGopSupport|TRUE
 
   # Debug Configuration
   gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2f
