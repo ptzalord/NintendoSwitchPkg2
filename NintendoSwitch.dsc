@@ -396,6 +396,8 @@
   NintendoSwitchPkg/Drivers/SidebandButtonDxe/SidebandButtonDxe.inf
   NintendoSwitchPkg/Drivers/ClockManagementDxe/ClockManagementDxe.inf
   NintendoSwitchPkg/Drivers/PmicDxe/PmicDxe.inf
+  # Internal eMMC (SDMMC2) block device — required for booting from internal storage
+  NintendoSwitchPkg/Drivers/EmmcDxe/EmmcDxe.inf
   # Experimental unsafe overclocking – only included when opted in at build time.
   # WARNING: Can cause hardware damage.  See docs/ExperimentalOverclock.md.
   NintendoSwitchPkg/Drivers/ExperimentalOverclockDxe/ExperimentalOverclockDxe.inf

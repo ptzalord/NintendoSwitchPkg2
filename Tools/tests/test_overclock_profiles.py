@@ -44,8 +44,12 @@ OSC_FREQ_KHZ = 38_400  # 38.4 MHz oscillator input on Erista Switch
 
 
 def pllc_output_khz(M: int, N: int, P: int) -> float:
-    """Compute Fout = Fin * N / (M * 2^P) in kHz."""
-    return OSC_FREQ_KHZ * N / (M * (2 ** P))
+    """Compute Fout = Fin * N / (M * P) in kHz.
+
+    On Tegra210 PLLX, the DIVP register field is the literal post-divider
+    value (P=1 → no division, P=2 → divide by 2), NOT a power-of-2 exponent.
+    """
+    return OSC_FREQ_KHZ * N / (M * P)
 
 
 # ---------------------------------------------------------------------------

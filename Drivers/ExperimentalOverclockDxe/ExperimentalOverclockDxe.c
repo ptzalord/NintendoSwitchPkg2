@@ -127,7 +127,9 @@ OcCheckSiliconRevision (
 
 /*
  * PLL parameters (M=1 for all, Fin=38.4 MHz).
- * Fout = 38.4 * N / P  MHz.
+ * Fout = Fin * N / (M * P)  where P is the literal post-divider value.
+ * On Tegra210 PLLX, DIVP is stored as a direct divisor (P=1 → ÷1, P=2 → ÷2),
+ * NOT as a power-of-2 exponent.
  *
  * Stock:      38.4 * 53 /  2 = 1017.6 ≈ 1020 MHz  (P=2,  N=53)
  * Mild:       38.4 * 40 /  1 = 1536   ≈ 1530 MHz  (P=1,  N=40)
