@@ -1,0 +1,66 @@
+name: Host-side Validation
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-config:
+    name: Host-side config / source checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install host-side test dependencies
+        run: python -m pip install pytest
+
+      - name: Run host-side source and simulation tests
+        run: python -m pytest Tools/tests/ -v
+
+      - name: Verify Python test files compile
+        run: python -m py_compile Tools/tests/*.py
+
+      - name: Check for duplicate PCD assignments in NintendoSwitch.dsc
+        run: |
+          python Tools/tests/check_duplicate_pcds.py NintendoSwitch.dsc
+
+      - name: Verify PcdExperimentalOverclockEnable defaults to FALSE
+        run: |
+          python - <<'EOF'
+          import re, sys
+          text = open('NintendoSwitch.dec').read()
+          m = re.search(r'PcdExperimentalOverclockEnable\|(\w+)\|BOOLEAN', text)
+          if not m:
+              print("ERROR: PcdExperimentalOverclockEnable not found in NintendoSwitch.dec")
+              sys.exit(1)
+          if m.group(1) != 'FALSE':
+              print(f"ERROR: PcdExperimentalOverclockEnable default must be FALSE, got {m.group(1)}")
+              sys.exit(1)
+          print("OK: PcdExperimentalOverclockEnable defaults to FALSE")
+          EOF
+
+      - name: Verify EfiMaxMemoryType not used in MemoryMap.h
+        run: |
+          if grep -q 'EfiMaxMemoryType' Include/Device/MemoryMap.h; then
+            echo "ERROR: EfiMaxMemoryType used in MemoryMap.h (should be EfiReservedMemoryType)"
+            exit 1
+          fi
+          echo "OK: EfiMaxMemoryType not used in MemoryMap.h"
+
+      - name: Verify generated Python cache artifacts are not committed
+        run: |
+          if git ls-files | grep -E '(^|/)__pycache__/|\.py[cod]$' | grep -q '^Tools/tests/'; then
+            echo "ERROR: committed __pycache__ artifacts found"
+            exit 1
+          fi
+          echo "OK: no committed __pycache__ artifacts"

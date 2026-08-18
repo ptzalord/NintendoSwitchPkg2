@@ -10,7 +10,8 @@ ACPI also boots Windows and Linux, but limited devices are provided (only CPU at
 - Clocks (reset, PLL, etc.)
 - Power Management (PMC, PMIC & regulators, etc.)
 - GPIO and Pin Multiplexor.
-- MicroSD (should support SDSC, HC. XC probed and have partition table shown, but not intensively tested). eMMC support will be added soon.
+- MicroSD (should support SDSC, HC. XC probed and have partition table shown, but not intensively tested).
+- Internal eMMC detection/read path exists, but is read-only and hardware-untested.
 - Screen and FrameBuffer (need special [Coreboot](https://github.com/imbushuo/Coreboot))
 - Side-band buttons, not yet registered as EFI Input Device.
 - UART (Right Joy Con, 115200, 8n1)
@@ -44,17 +45,24 @@ Plug in connector on the right-side Joy Con and connect to PC. Use WinDbg serial
 ## Clone Repositories
 - git clone https://github.com/fail0verflow/shofel2.git
 - git clone https://github.com/WolfLink115/Coreboot.git --recursive
-- git clone https://github.com/tianocore/edk2.git --recursive
-    ### Clone NintendoSwitchPkg inside of the EDK2 source
-    - https://github.com/WolfLink115/NintendoSwitchPkg.git
+- git clone --branch edk2-stable202608 https://github.com/tianocore/edk2.git --recursive
+- git clone --branch stable202608 https://github.com/tianocore/edk2-platforms.git --recursive
+- copy this repository into the edk2 workspace as `NintendoSwitchPkg`
 
 ## Build ShofEL2 exploit, EDK2, and Coreboot
 - cd shofel2/exploit && make
 - cd ../edk2
 - source edksetup.sh
 - make -C BaseTools/
-- cp NintendoSwitchPkg/Tools/run-build.sh . && ./run-build.sh
+- export PACKAGES_PATH="$PWD:$PWD/../edk2-platforms"
+- build -a AARCH64 -t GCC5 -p NintendoSwitchPkg/NintendoSwitch.dsc
 - cd ../Coreboot && make nintendo_switch_defconfig && make
+
+### Important safety note
+
+Do not flash firmware or attempt to enable internal eMMC boot or experimental
+overclocking paths until the full firmware build above succeeds and controlled
+validation has been performed on expendable Erista hardware.
 
 ## After all that we should now have a coreboot.rom file in the build folder. Now we can try to boot edk2.
 - cd ../shofel2/exploit
@@ -73,4 +81,3 @@ Plug in connector on the right-side Joy Con and connect to PC. Use WinDbg serial
 - Fail0verflow for making the shofel2 exploit and Switch Coreboot sources.
 
 - The entirety of the Switch modding team for making this possible.
-

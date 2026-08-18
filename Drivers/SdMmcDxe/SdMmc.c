@@ -43,6 +43,11 @@ MMC_CONFIG mConfig;
 TEGRA_MMC_PRIV mPriv;
 struct mmc mMmcInstance;
 struct blk_desc mBlkDesc;
+BOOLEAN mForceMmcOnlyInit = FALSE;
+
+STATIC CONST EFI_GUID gSdMmcBlockIoDevicePathGuid = {
+	0x7e3108d3, 0x3849, 0x49aa, { 0x9d, 0x69, 0xdc, 0x51, 0xc3, 0x2e, 0x80, 0x31 }
+};
 
 void tegra_mmc_set_power(
     struct tegra_mmc_priv *priv,
@@ -429,8 +434,8 @@ void tegra_mmc_change_clock(struct tegra_mmc_priv *priv, uint clock)
 	 * Change Tegra SDMMCx clock divisor here. Source is PLLP_OUT0
 	 */
 	if (clock == 0) goto out;
-    
-	rate = mClkProtocol->SetRate(PERIPH_ID_SDMMC1, clock);
+
+	rate = mClkProtocol->SetRate(priv->periph_id, clock);
 	div = (rate + clock - 1) / clock;
 	debug("div = %d\n", div);
 
@@ -642,6 +647,7 @@ SdControllerProbe
 
     // sdhci@700b0000
     mPriv.reg = (VOID*) (UINTN) 0x700b0000;
+    mPriv.periph_id = PERIPH_ID_SDMMC1;
 
     // Reset controller 1, &tegra_car 14
     mClkProtocol->AssertRst(PERIPH_ID_SDMMC1);
@@ -685,16 +691,6 @@ SdMmcDxeInitialize
 {
     EFI_STATUS Status;
 	BIO_INSTANCE *Instance;
-
-    {
-      volatile UINT32  *DebugFb = (volatile UINT32 *)0xdfb80000;
-      UINTN             DebugFbIndex;
-
-      /* Bring-up debug: SdMmcDxe entry */
-      for (DebugFbIndex = 0; DebugFbIndex < 720UL * 1280UL; DebugFbIndex++) {
-        DebugFb[DebugFbIndex] = 0xFF808000; /* OLIVE */
-      }
-    }
 
     Status = gBS->LocateProtocol(
         &gTegraUBootClockManagementProtocolGuid,
@@ -758,18 +754,27 @@ SdMmcDxeInitialize
 
 		if (!FoundMbr)
 		{
-			DEBUG((EFI_D_ERROR, "(Protective) MBR not found \n"));
-			CpuDeadLoop();
+			DEBUG((EFI_D_ERROR, "SdMmcDxe: (Protective) MBR not found on SD card\n"));
+			Status = EFI_NOT_FOUND;
+			goto exit;
 		}
 		
-		// Install EFI protocol
-		ASSERT(mBlkDesc.lba != 0);
-		ASSERT(mBlkDesc.blksz != 0);
 		Status = BioInstanceContructor(&Instance);
 		if (EFI_ERROR(Status)) goto exit;
 
-		Instance->BlockMedia.BlockSize = mBlkDesc.blksz;
-		Instance->BlockMedia.LastBlock = mBlkDesc.lba;
+		Status = BioConfigureInstance(
+			Instance,
+			(UINT32)mBlkDesc.blksz,
+			(UINT64)mBlkDesc.lba,
+			TRUE,
+			TRUE,
+			&gSdMmcBlockIoDevicePathGuid
+		);
+		if (EFI_ERROR(Status))
+		{
+			FreePool(Instance);
+			goto exit;
+		}
 		Status = gBS->InstallMultipleProtocolInterfaces(
 			&Instance->Handle,
 			&gEfiBlockIoProtocolGuid,    
@@ -778,6 +783,11 @@ SdMmcDxeInitialize
 			&Instance->DevicePath,
 			NULL
 		);
+		if (EFI_ERROR(Status))
+		{
+			FreePool(Instance);
+			goto exit;
+		}
 	}
 
 exit:

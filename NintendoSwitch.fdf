@@ -113,6 +113,11 @@ READ_LOCK_STATUS   = TRUE
   INF NintendoSwitchPkg/Drivers/SidebandButtonDxe/SidebandButtonDxe.inf
   INF NintendoSwitchPkg/Drivers/ClockManagementDxe/ClockManagementDxe.inf
   INF NintendoSwitchPkg/Drivers/PmicDxe/PmicDxe.inf
+  # Internal eMMC (SDMMC2) — required for booting from Switch internal storage
+  INF NintendoSwitchPkg/Drivers/EmmcDxe/EmmcDxe.inf
+  # Experimental unsafe overclocking – safe to include; activates only when
+  # PcdExperimentalOverclockEnable=TRUE AND the runtime variable is set.
+  INF NintendoSwitchPkg/Drivers/ExperimentalOverclockDxe/ExperimentalOverclockDxe.inf
   INF NintendoSwitchPkg/Drivers/SdMmcDxe/SdMmcDxe.inf
   INF NintendoSwitchPkg/Drivers/PinMuxDxe/PinMuxDxe.inf
   # USB EHCI PHY init for Tegra210
