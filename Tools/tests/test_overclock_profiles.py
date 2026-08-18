@@ -1,274 +1,207 @@
 #!/usr/bin/env python3
 """
-test_overclock_profiles.py – host-side validation tests for
-ExperimentalOverclockDxe profile logic.
+Host-side tests for ExperimentalOverclockDxe safety policy.
 
-These tests exercise the profile table, bound-checking rules, and
-rollback/error-handling logic by simulating the firmware driver
-behaviour in Python.  They do NOT run on real hardware.
-
-Run with:  python -m pytest Tools/tests/test_overclock_profiles.py -v
+These tests model the intended logic and cross-check the checked-in C sources.
+They do not validate any real Tegra210 hardware behaviour.
 """
-import pytest
-import re
+
+from __future__ import annotations
+
 import os
+import re
 
-# ---------------------------------------------------------------------------
-# Constants mirrored from ExperimentalOverclock.h
-# (single source of truth is the C header; these values must match it)
-# ---------------------------------------------------------------------------
 
-OC_CPU_FREQ_STOCK_KHZ       = 1_020_000
-OC_CPU_FREQ_MILD_KHZ        = 1_530_000
-OC_CPU_FREQ_AGGRESSIVE_KHZ  = 2_073_600
-OC_CPU_FREQ_MAX_CEILING_KHZ = 2_091_000
+EFI_SUCCESS = "EFI_SUCCESS"
+EFI_INVALID_PARAMETER = "EFI_INVALID_PARAMETER"
+EFI_UNSUPPORTED = "EFI_UNSUPPORTED"
+EFI_NOT_READY = "EFI_NOT_READY"
+EFI_DEVICE_ERROR = "EFI_DEVICE_ERROR"
+EFI_PROTOCOL_ERROR = "EFI_PROTOCOL_ERROR"
 
-OC_GPU_FREQ_STOCK_KHZ       = 307_200
-OC_GPU_FREQ_MAX_CEILING_KHZ = 998_000
+OC_CPU_FREQ_STOCK_KHZ = 1_020_000
+OC_CPU_FREQ_MILD_KHZ = 1_530_000
+OC_CPU_FREQ_MAX_CEILING_KHZ = 1_530_000
 
 T210_SKU_ID_ERISTA = 0x83
 
-OcProfileStock      = 0
-OcProfileMild       = 1
-OcProfileAggressive = 2
-OcProfileMax        = OcProfileAggressive
+OcProfileStock = 0
+OcProfileMild = 1
+OcProfileMax = OcProfileMild
 
-# Profile table (must match mPllcParams in ExperimentalOverclockDxe.c)
-PLLC_PARAMS = {
-    OcProfileStock:      {"cpu_freq_khz": OC_CPU_FREQ_STOCK_KHZ,       "M": 1, "N": 53, "P": 2},
-    OcProfileMild:       {"cpu_freq_khz": OC_CPU_FREQ_MILD_KHZ,        "M": 1, "N": 40, "P": 1},
-    OcProfileAggressive: {"cpu_freq_khz": OC_CPU_FREQ_AGGRESSIVE_KHZ,  "M": 1, "N": 54, "P": 1},
+PLLX_PARAMS = {
+    OcProfileStock: {"cpu_freq_khz": OC_CPU_FREQ_STOCK_KHZ, "M": 1, "N": 53, "P": 1},
+    OcProfileMild: {"cpu_freq_khz": OC_CPU_FREQ_MILD_KHZ, "M": 1, "N": 40, "P": 0},
 }
 
-OSC_FREQ_KHZ = 38_400  # 38.4 MHz oscillator input on Erista Switch
+ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
+HEADER_PATH = os.path.join(
+    ROOT, "Drivers", "ExperimentalOverclockDxe", "ExperimentalOverclock.h"
+)
+SOURCE_PATH = os.path.join(
+    ROOT, "Drivers", "ExperimentalOverclockDxe", "ExperimentalOverclockDxe.c"
+)
+DSC_PATH = os.path.join(ROOT, "NintendoSwitch.dsc")
+DEC_PATH = os.path.join(ROOT, "NintendoSwitch.dec")
 
 
-def pllc_output_khz(M: int, N: int, P: int) -> float:
-    """Compute Fout = Fin * N / (M * P) in kHz.
-
-    On Tegra210 PLLX, the DIVP register field is the literal post-divider
-    value (P=1 → no division, P=2 → divide by 2), NOT a power-of-2 exponent.
-    """
-    return OSC_FREQ_KHZ * N / (M * P)
+def pllx_output_khz(m: int, n: int, p: int) -> float:
+    return 38_400 * n / (m * (2**p))
 
 
-# ---------------------------------------------------------------------------
-# Simulation helpers
-# ---------------------------------------------------------------------------
-
-class SimulatedSilicon:
-    """Simulate FUSE_SKU_INFO readback."""
-    def __init__(self, sku_id: int):
-        self.sku_id = sku_id
-
-    def is_erista(self) -> bool:
-        return (self.sku_id & 0xFF) == T210_SKU_ID_ERISTA
-
-
-def oc_validate_cpu_freq(freq_khz: int) -> bool:
-    """Returns True if the frequency is within the hard ceiling."""
-    return freq_khz <= OC_CPU_FREQ_MAX_CEILING_KHZ
+def consume_one_shot_variable(store: dict[str, int], name: str) -> int | None:
+    value = store.pop(name, None)
+    return value
 
 
 def oc_apply_profile(
     profile: int,
-    silicon: SimulatedSilicon,
-    pllc_will_lock: bool = True,
-) -> tuple[bool, str]:
-    """
-    Simulate OcApplyProfile().
-
-    Returns (success: bool, message: str).
-    On failure, the rollback to stock is simulated (logged in message).
-    """
-    # Validate profile ID
+    *,
+    sku_id: int,
+    thermal_validation_available: bool,
+    power_validation_available: bool,
+    pllx_will_lock: bool = True,
+    rollback_will_succeed: bool = True,
+) -> str:
     if profile < 0 or profile > OcProfileMax:
-        return False, f"invalid profile id {profile}"
+        return EFI_INVALID_PARAMETER
 
-    params = PLLC_PARAMS[profile]
+    params = PLLX_PARAMS[profile]
+    if params["cpu_freq_khz"] > OC_CPU_FREQ_MAX_CEILING_KHZ:
+        return EFI_INVALID_PARAMETER
 
-    # Validate CPU frequency against ceiling
-    if not oc_validate_cpu_freq(params["cpu_freq_khz"]):
-        return False, f"cpu freq {params['cpu_freq_khz']} exceeds ceiling {OC_CPU_FREQ_MAX_CEILING_KHZ}"
+    if (sku_id & 0xFF) != T210_SKU_ID_ERISTA:
+        return EFI_UNSUPPORTED
 
-    # Silicon check
-    if not silicon.is_erista():
-        return False, f"unsupported silicon SKU=0x{silicon.sku_id:02x}"
+    if profile == OcProfileStock:
+        return EFI_SUCCESS
 
-    # Simulate PLLC programming
-    if not pllc_will_lock:
-        # Simulate rollback
-        return False, f"pllc lock timed out; rolled back to stock"
+    if not thermal_validation_available:
+        return EFI_NOT_READY
 
-    return True, f"profile {profile} applied at {params['cpu_freq_khz']} kHz"
+    if not power_validation_available:
+        return EFI_UNSUPPORTED
 
+    if not pllx_will_lock:
+        return EFI_DEVICE_ERROR if rollback_will_succeed else EFI_PROTOCOL_ERROR
 
-# ---------------------------------------------------------------------------
-# Tests
-# ---------------------------------------------------------------------------
-
-class TestProfileBoundChecking:
-    def test_all_profiles_within_cpu_ceiling(self):
-        for pid, params in PLLC_PARAMS.items():
-            assert params["cpu_freq_khz"] <= OC_CPU_FREQ_MAX_CEILING_KHZ, (
-                f"Profile {pid} CPU freq {params['cpu_freq_khz']} kHz "
-                f"exceeds ceiling {OC_CPU_FREQ_MAX_CEILING_KHZ} kHz"
-            )
-
-    def test_ceiling_itself_is_rejected(self):
-        """A frequency exactly 1 Hz above the ceiling must be rejected."""
-        above_ceiling = OC_CPU_FREQ_MAX_CEILING_KHZ + 1
-        assert not oc_validate_cpu_freq(above_ceiling)
-
-    def test_ceiling_itself_is_accepted(self):
-        """A frequency exactly at the ceiling must be accepted."""
-        assert oc_validate_cpu_freq(OC_CPU_FREQ_MAX_CEILING_KHZ)
-
-    def test_stock_below_mild(self):
-        assert PLLC_PARAMS[OcProfileStock]["cpu_freq_khz"] < PLLC_PARAMS[OcProfileMild]["cpu_freq_khz"]
-
-    def test_mild_below_aggressive(self):
-        assert PLLC_PARAMS[OcProfileMild]["cpu_freq_khz"] < PLLC_PARAMS[OcProfileAggressive]["cpu_freq_khz"]
-
-    def test_aggressive_below_ceiling(self):
-        assert PLLC_PARAMS[OcProfileAggressive]["cpu_freq_khz"] < OC_CPU_FREQ_MAX_CEILING_KHZ
-
-    def test_invalid_profile_id_rejected(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(OcProfileMax + 1, silicon)
-        assert not ok
-        assert "invalid" in msg.lower()
-
-    def test_negative_profile_id_rejected(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(-1, silicon)
-        assert not ok
+    return EFI_SUCCESS
 
 
-class TestPllcFrequencyCalculation:
-    """Verify pre-calculated M/N/P values produce frequencies near the target."""
+class TestProfileTable:
+    def test_only_stock_and_mild_profiles_exist(self):
+        assert set(PLLX_PARAMS) == {OcProfileStock, OcProfileMild}
+        assert OcProfileMax == OcProfileMild
 
-    TOLERANCE_KHZ = 50_000  # 50 MHz tolerance for integer PLL rounding
+    def test_all_profiles_respect_hard_ceiling(self):
+        for params in PLLX_PARAMS.values():
+            assert params["cpu_freq_khz"] <= OC_CPU_FREQ_MAX_CEILING_KHZ
 
-    def test_stock_pllc_frequency(self):
-        p = PLLC_PARAMS[OcProfileStock]
-        fout = pllc_output_khz(p["M"], p["N"], p["P"])
-        assert abs(fout - OC_CPU_FREQ_STOCK_KHZ) <= self.TOLERANCE_KHZ, (
-            f"Stock PLLC output {fout:.0f} kHz not near {OC_CPU_FREQ_STOCK_KHZ} kHz"
-        )
-
-    def test_mild_pllc_frequency(self):
-        p = PLLC_PARAMS[OcProfileMild]
-        fout = pllc_output_khz(p["M"], p["N"], p["P"])
-        assert abs(fout - OC_CPU_FREQ_MILD_KHZ) <= self.TOLERANCE_KHZ, (
-            f"Mild PLLC output {fout:.0f} kHz not near {OC_CPU_FREQ_MILD_KHZ} kHz"
-        )
-
-    def test_aggressive_pllc_frequency(self):
-        p = PLLC_PARAMS[OcProfileAggressive]
-        fout = pllc_output_khz(p["M"], p["N"], p["P"])
-        assert abs(fout - OC_CPU_FREQ_AGGRESSIVE_KHZ) <= self.TOLERANCE_KHZ, (
-            f"Aggressive PLLC output {fout:.0f} kHz not near {OC_CPU_FREQ_AGGRESSIVE_KHZ} kHz"
-        )
-
-    def test_no_profile_exceeds_ceiling(self):
-        for pid, p in PLLC_PARAMS.items():
-            fout = pllc_output_khz(p["M"], p["N"], p["P"])
-            assert fout <= OC_CPU_FREQ_MAX_CEILING_KHZ, (
-                f"Profile {pid} PLLC output {fout:.0f} kHz exceeds ceiling"
-            )
+    def test_stock_and_mild_pllx_outputs_match_expected_range(self):
+        stock = PLLX_PARAMS[OcProfileStock]
+        mild = PLLX_PARAMS[OcProfileMild]
+        assert abs(pllx_output_khz(stock["M"], stock["N"], stock["P"]) - OC_CPU_FREQ_STOCK_KHZ) <= 50_000
+        assert abs(pllx_output_khz(mild["M"], mild["N"], mild["P"]) - OC_CPU_FREQ_MILD_KHZ) <= 50_000
 
 
-class TestUnsupportedHardwareRejection:
-    def test_erista_accepted(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(OcProfileMild, silicon)
-        assert ok, f"Expected success on Erista, got: {msg}"
+class TestFailClosedPolicy:
+    def test_invalid_profile_rejected(self):
+        assert oc_apply_profile(
+            OcProfileMax + 1,
+            sku_id=T210_SKU_ID_ERISTA,
+            thermal_validation_available=False,
+            power_validation_available=False,
+        ) == EFI_INVALID_PARAMETER
 
-    def test_mariko_sku_rejected(self):
-        # Mariko has a different SKU; 0x01 is a representative non-Erista value.
-        silicon = SimulatedSilicon(0x01)
-        ok, msg = oc_apply_profile(OcProfileMild, silicon)
-        assert not ok
-        assert "unsupported" in msg.lower()
+    def test_non_erista_rejected(self):
+        assert oc_apply_profile(
+            OcProfileMild,
+            sku_id=0x01,
+            thermal_validation_available=True,
+            power_validation_available=True,
+        ) == EFI_UNSUPPORTED
 
-    def test_unknown_sku_rejected(self):
-        for bad_sku in [0x00, 0xFF, 0x42, 0x82, 0x84]:
-            silicon = SimulatedSilicon(bad_sku)
-            ok, msg = oc_apply_profile(OcProfileMild, silicon)
-            assert not ok, f"SKU 0x{bad_sku:02x} should have been rejected"
+    def test_missing_thermal_validation_fails_closed(self):
+        assert oc_apply_profile(
+            OcProfileMild,
+            sku_id=T210_SKU_ID_ERISTA,
+            thermal_validation_available=False,
+            power_validation_available=True,
+        ) == EFI_NOT_READY
 
-    def test_stock_profile_on_unknown_silicon_also_rejected(self):
-        """Silicon check happens before profile application even for stock."""
-        silicon = SimulatedSilicon(0x00)
-        ok, msg = oc_apply_profile(OcProfileStock, silicon)
-        # Stock profile = 0; the driver would skip silicon check only at
-        # OcProfileStock if it is used as a rollback target.  In our
-        # simulation we enforce the check for all non-trivial activations;
-        # the actual rollback path calls OcRestoreStock() which bypasses
-        # the silicon check.
-        # Here we simulate the full activation path:
-        assert not ok
+    def test_missing_power_validation_fails_closed(self):
+        assert oc_apply_profile(
+            OcProfileMild,
+            sku_id=T210_SKU_ID_ERISTA,
+            thermal_validation_available=True,
+            power_validation_available=False,
+        ) == EFI_UNSUPPORTED
 
-
-class TestRollbackOnError:
-    def test_pllc_lock_failure_triggers_rollback(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(OcProfileMild, silicon, pllc_will_lock=False)
-        assert not ok
-        assert "rolled back" in msg.lower()
-
-    def test_aggressive_pllc_lock_failure_triggers_rollback(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(OcProfileAggressive, silicon, pllc_will_lock=False)
-        assert not ok
-        assert "rolled back" in msg.lower()
-
-    def test_successful_stock_apply_does_not_modify_message(self):
-        silicon = SimulatedSilicon(T210_SKU_ID_ERISTA)
-        ok, msg = oc_apply_profile(OcProfileStock, silicon, pllc_will_lock=True)
-        assert ok
+    def test_program_failure_reports_rollback_result(self):
+        assert oc_apply_profile(
+            OcProfileMild,
+            sku_id=T210_SKU_ID_ERISTA,
+            thermal_validation_available=True,
+            power_validation_available=True,
+            pllx_will_lock=False,
+            rollback_will_succeed=True,
+        ) == EFI_DEVICE_ERROR
+        assert oc_apply_profile(
+            OcProfileMild,
+            sku_id=T210_SKU_ID_ERISTA,
+            thermal_validation_available=True,
+            power_validation_available=True,
+            pllx_will_lock=False,
+            rollback_will_succeed=False,
+        ) == EFI_PROTOCOL_ERROR
 
 
-class TestHeaderConsistency:
-    """Parse ExperimentalOverclock.h and verify constants match this file."""
+class TestOneShotOptIn:
+    def test_variable_is_consumed_before_use(self):
+        store = {"NintendoSwitchOcProfile": OcProfileMild}
+        assert consume_one_shot_variable(store, "NintendoSwitchOcProfile") == OcProfileMild
+        assert "NintendoSwitchOcProfile" not in store
 
-    HEADER_PATH = os.path.join(
-        os.path.dirname(__file__),
-        "..", "..",
-        "Drivers", "ExperimentalOverclockDxe", "ExperimentalOverclock.h",
-    )
+    def test_absent_variable_is_noop(self):
+        store: dict[str, int] = {}
+        assert consume_one_shot_variable(store, "NintendoSwitchOcProfile") is None
 
-    def _extract_define(self, text: str, name: str) -> int:
-        m = re.search(rf"#define\s+{re.escape(name)}\s+(0x[0-9a-fA-F]+|[0-9]+)UL", text)
-        if not m:
-            m = re.search(rf"#define\s+{re.escape(name)}\s+(0x[0-9a-fA-F]+|[0-9]+)", text)
-        assert m, f"Could not find #define {name} in header"
-        val = m.group(1)
-        return int(val, 16) if val.startswith("0x") or val.startswith("0X") else int(val)
 
-    def test_header_constants_match_test_constants(self):
-        path = os.path.normpath(self.HEADER_PATH)
-        with open(path) as f:
-            text = f.read()
+class TestSourceConsistency:
+    @staticmethod
+    def _extract_define(text: str, name: str) -> int:
+        match = re.search(rf"#define\s+{re.escape(name)}\s+(0x[0-9a-fA-F]+|[0-9]+)UL?", text)
+        assert match, f"missing define {name}"
+        value = match.group(1)
+        return int(value, 16) if value.lower().startswith("0x") else int(value)
 
-        assert self._extract_define(text, "OC_CPU_FREQ_STOCK_KHZ")       == OC_CPU_FREQ_STOCK_KHZ
-        assert self._extract_define(text, "OC_CPU_FREQ_MILD_KHZ")        == OC_CPU_FREQ_MILD_KHZ
-        assert self._extract_define(text, "OC_CPU_FREQ_AGGRESSIVE_KHZ")  == OC_CPU_FREQ_AGGRESSIVE_KHZ
+    def test_header_constants_match_expected_values(self):
+        text = open(HEADER_PATH, encoding="utf-8").read()
+        assert self._extract_define(text, "OC_CPU_FREQ_STOCK_KHZ") == OC_CPU_FREQ_STOCK_KHZ
+        assert self._extract_define(text, "OC_CPU_FREQ_MILD_KHZ") == OC_CPU_FREQ_MILD_KHZ
         assert self._extract_define(text, "OC_CPU_FREQ_MAX_CEILING_KHZ") == OC_CPU_FREQ_MAX_CEILING_KHZ
-        assert self._extract_define(text, "T210_SKU_ID_ERISTA")          == T210_SKU_ID_ERISTA
+        assert self._extract_define(text, "T210_SKU_ID_ERISTA") == T210_SKU_ID_ERISTA
+
+    def test_source_uses_pllx_not_pllc(self):
+        text = open(SOURCE_PATH, encoding="utf-8").read()
+        assert "PLLX" in text
+        assert "PLLC" not in text
+        assert "EFI_NOT_READY" in text
+        assert "EFI_PROTOCOL_ERROR" in text
+        assert "OcConsumeRequestedProfile" in text
+
+    def test_dec_default_opt_in_remains_false(self):
+        text = open(DEC_PATH, encoding="utf-8").read()
+        match = re.search(r"PcdExperimentalOverclockEnable\|(\w+)\|BOOLEAN", text)
+        assert match
+        assert match.group(1) == "FALSE"
 
 
 class TestDscNoDuplicatePcds:
-    """Verify the DSC file has no duplicate PCD assignments."""
-
-    DSC_PATH = os.path.join(
-        os.path.dirname(__file__), "..", "..", "NintendoSwitch.dsc"
-    )
-
     def test_no_duplicates(self):
         import sys
+
         sys.path.insert(0, os.path.dirname(__file__))
         from check_duplicate_pcds import check_duplicates
-        result = check_duplicates(os.path.normpath(self.DSC_PATH))
-        assert result == 0, "Duplicate PCD assignments found in NintendoSwitch.dsc"
+
+        assert check_duplicates(DSC_PATH) == 0

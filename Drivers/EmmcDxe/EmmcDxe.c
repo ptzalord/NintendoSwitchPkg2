@@ -14,7 +14,7 @@
     - Bus width  : 8-bit (eMMC spec)
     - Voltages   : 1.8 V (MMC_VDD_165_195); eMMC is not 3.3 V removable media
     - Card detect: no GPIO detect — eMMC is soldered and always present
-    - Media flags: non-removable, read-write
+    - Media flags: non-removable, read-only until writes are implemented
 
   NOTE: The Switch eMMC contains Nintendo system partitions (PRODINFO, BCPKG,
   etc.) at the start of the raw USER DATA area.  Writing to the raw eMMC
@@ -66,6 +66,11 @@ extern MMC_CONFIG                                mConfig;
 extern TEGRA_MMC_PRIV                            mPriv;
 extern struct mmc                                mMmcInstance;
 extern struct blk_desc                           mBlkDesc;
+extern BOOLEAN                                   mForceMmcOnlyInit;
+
+STATIC CONST EFI_GUID gEmmcBlockIoDevicePathGuid = {
+  0xf7361c2a, 0x0968, 0x4ee6, { 0xa5, 0x74, 0x62, 0x48, 0x48, 0x1f, 0xec, 0xc3 }
+};
 
 /**
   Configure the SDMMC2 controller and the shared MMC globals for
@@ -99,6 +104,7 @@ EmmcControllerProbe (
 
   mMmcInstance.cfg   = &mConfig;
   mMmcInstance.clock = mConfig.f_min;
+  mForceMmcOnlyInit = TRUE;
 
   /* SDMMC2 MMIO base — internal eMMC on Switch Erista. */
   mPriv.reg      = (VOID *)(UINTN)TEGRA_SDMMC2_BASE;
@@ -224,15 +230,19 @@ EmmcDxeInitialize (
     return Status;
   }
 
-  Instance->BlockMedia.BlockSize     = mBlkDesc.blksz;
-  Instance->BlockMedia.LastBlock     = mBlkDesc.lba;
-  /*
-   * eMMC is soldered — mark non-removable and writable.
-   * WARNING: writing to the raw eMMC without care can destroy Nintendo OS
-   * partitions.  See docs/EmmcBoot.md.
-   */
-  Instance->BlockMedia.RemovableMedia = FALSE;
-  Instance->BlockMedia.ReadOnly       = FALSE;
+  Status = BioConfigureInstance (
+             Instance,
+             (UINT32)mBlkDesc.blksz,
+             (UINT64)mBlkDesc.lba,
+             FALSE,
+             TRUE,
+             &gEmmcBlockIoDevicePathGuid
+             );
+  if (EFI_ERROR (Status)) {
+    DEBUG ((EFI_D_ERROR, "EmmcDxe: invalid BlockIo media geometry: %r\n", Status));
+    FreePool (Instance);
+    return Status;
+  }
 
   /* Install BlockIo and DevicePath on a new handle. */
   Status = gBS->InstallMultipleProtocolInterfaces (
@@ -244,6 +254,7 @@ EmmcDxeInitialize (
   if (EFI_ERROR (Status)) {
     DEBUG ((EFI_D_ERROR, "EmmcDxe: InstallMultipleProtocolInterfaces failed: %r\n",
             Status));
+    FreePool (Instance);
     return Status;
   }
 

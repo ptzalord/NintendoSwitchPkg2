@@ -25,8 +25,6 @@ def check_duplicates(dsc_path: str) -> int:
     with open(dsc_path, encoding="utf-8") as f:
         lines = f.readlines()
 
-    section_re = re.compile(r"^\[(Pcds[^]]*)\]", re.IGNORECASE)
-    comp_section_re = re.compile(r"^\[Components", re.IGNORECASE)
     pcd_re = re.compile(r"^\s*(g\w+\.\w+)\s*\|")
 
     in_components = False
