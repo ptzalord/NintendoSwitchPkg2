@@ -5,9 +5,15 @@ on:
     branches: [ "**" ]
   pull_request:
     branches: [ "**" ]
+  workflow_dispatch:
 
 permissions:
   contents: read
+
+env:
+  EDK2_REF: edk2-stable202605
+  EDK2_SHA: b03a21a63e3bd001f52c527e5a57feddb53a690b
+  EDK2_PLATFORMS_SHA: ae058185e12591a9a49e5895e90ca52936851973
 
 jobs:
   validate-config:
@@ -64,3 +70,107 @@ jobs:
             exit 1
           fi
           echo "OK: no committed __pycache__ artifacts"
+
+  edk2-aarch64-build:
+    name: Full EDK2 AARCH64 firmware build
+    needs: validate-config
+    runs-on: ubuntu-latest
+    env:
+      SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+      EDK2_PLATFORMS_REPO: https://github.com/tianocore/edk2-platforms.git
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+
+      - name: Install EDK2 build dependencies
+        run: |
+          sudo apt-get update
+          DEBIAN_FRONTEND=noninteractive sudo apt-get install -y --no-install-recommends \
+            acpica-tools \
+            binutils-aarch64-linux-gnu \
+            build-essential \
+            ca-certificates \
+            gcc-aarch64-linux-gnu \
+            git \
+            nasm \
+            python3 \
+            python3-pip \
+            uuid-dev
+
+      - name: Create pinned EDK2 workspace
+        run: |
+          set -euxo pipefail
+          WORK_ROOT="${RUNNER_TEMP}/edk2-workspace"
+          echo "WORK_ROOT=${WORK_ROOT}" >> "${GITHUB_ENV}"
+
+          git clone --branch "${EDK2_REF}" --depth 1 https://github.com/tianocore/edk2.git "${WORK_ROOT}/edk2"
+          test "$(git -C "${WORK_ROOT}/edk2" rev-parse HEAD)" = "${EDK2_SHA}"
+          git -C "${WORK_ROOT}/edk2" submodule update --init --recursive
+
+          git clone "${EDK2_PLATFORMS_REPO}" "${WORK_ROOT}/edk2-platforms"
+          git -C "${WORK_ROOT}/edk2-platforms" checkout --detach "${EDK2_PLATFORMS_SHA}"
+          test "$(git -C "${WORK_ROOT}/edk2-platforms" rev-parse HEAD)" = "${EDK2_PLATFORMS_SHA}"
+
+          test "$(git -C "${GITHUB_WORKSPACE}" rev-parse HEAD)" = "${SOURCE_SHA}"
+          ln -s "${GITHUB_WORKSPACE}" "${WORK_ROOT}/edk2/NintendoSwitchPkg"
+
+      - name: Build NintendoSwitchPkg
+        run: |
+          set -euo pipefail
+          ARTIFACT_ROOT="${RUNNER_TEMP}/nintendoswitchpkg-artifacts"
+          mkdir -p "${ARTIFACT_ROOT}"
+          LOG_FILE="${ARTIFACT_ROOT}/full-edk2-aarch64-build.log"
+
+          cd "${WORK_ROOT}/edk2"
+          source edksetup.sh
+          make -C BaseTools -j"$(nproc)"
+
+          export PACKAGES_PATH="${WORK_ROOT}/edk2:${WORK_ROOT}/edk2-platforms"
+          export GCC5_AARCH64_PREFIX="aarch64-linux-gnu-"
+
+          set +e
+          build -a AARCH64 -t GCC5 -p NintendoSwitchPkg/NintendoSwitch.dsc 2>&1 | tee "${LOG_FILE}"
+          build_status=${PIPESTATUS[0]}
+          set -e
+
+          if [ "${build_status}" -ne 0 ]; then
+            first_error_line="$(grep -Einm1 '\bfatal error\b|:\s*error\b|\berror:\b|^[[:space:]]*ERROR\b' "${LOG_FILE}" | cut -d: -f1 || true)"
+            if [ -n "${first_error_line}" ]; then
+              start_line=$(( first_error_line > 5 ? first_error_line - 5 : 1 ))
+              end_line=$(( first_error_line + 15 ))
+              echo "::group::First build error context"
+              sed -n "${start_line},${end_line}p" "${LOG_FILE}" | nl -ba -v "${start_line}"
+              echo "::endgroup::"
+              echo "::error title=First build/compiler error::$(sed -n "${first_error_line}p" "${LOG_FILE}")"
+            else
+              echo "::error title=EDK2 build failed::Build failed without a matched error pattern; inspect the full build log artifact."
+            fi
+            exit "${build_status}"
+          fi
+
+          OUTPUT_DIR="${WORK_ROOT}/edk2/Build/NintendoSwitch/DEBUG_GCC5/FV"
+          test -d "${OUTPUT_DIR}"
+          mkdir -p "${ARTIFACT_ROOT}/unvalidated-build-output"
+          cp -a "${OUTPUT_DIR}/." "${ARTIFACT_ROOT}/unvalidated-build-output/"
+          printf '%s\n' \
+            'This artifact contains unvalidated firmware build outputs from a GitHub-hosted' \
+            'EDK2 AARCH64 compile of NintendoSwitchPkg. Successful compilation is not' \
+            'hardware validation and does not make these artifacts safe to flash.' \
+            > "${ARTIFACT_ROOT}/unvalidated-build-output/README.txt"
+
+      - name: Upload full build log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: full-edk2-aarch64-build-log
+          path: ${{ runner.temp }}/nintendoswitchpkg-artifacts/full-edk2-aarch64-build.log
+          if-no-files-found: error
+
+      - name: Upload unvalidated firmware build outputs
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unvalidated-edk2-aarch64-firmware-build-output
+          path: ${{ runner.temp }}/nintendoswitchpkg-artifacts/unvalidated-build-output
+          if-no-files-found: error

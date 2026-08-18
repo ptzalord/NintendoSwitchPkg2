@@ -30,10 +30,28 @@ Plug in connector on the right-side Joy Con and connect to PC. Use WinDbg serial
 - Sideband buttons as input device
 - Joy-Con (maybe not. Need high speed serial)
 
+## GitHub Actions firmware validation
+
+The `Host-side Validation` workflow now includes a full Ubuntu-hosted EDK2
+AARCH64 build in addition to the existing Python/source checks.
+
+- From a pull request, open the **Checks** tab (or the linked workflow run) for
+  the commit you want to validate.
+- From the **Actions** tab, select **Host-side Validation**, choose the branch
+  or PR head commit you want, and use **Run workflow**.
+- Download `full-edk2-aarch64-build-log` for the complete firmware build log.
+- If the build succeeds, download
+  `unvalidated-edk2-aarch64-firmware-build-output` for the generated firmware
+  files.
+
+Successful compilation is only a reproducible build check. It is not hardware
+validation, does not enable eMMC writes, and does not make the firmware safe to
+flash.
+
 # Building Instructions
 
 ## Install dependencies
-- sudo apt-get install build-essential uuid-dev iasl git python3-distutils gcc-arm-linux-gnueabi gcc-aarch64-linux-gnu
+- sudo apt-get install build-essential uuid-dev acpica-tools git python3 python3-pip nasm gcc-aarch64-linux-gnu binutils-aarch64-linux-gnu
     ### Install Powershell
     - sudo apt-get update
     - sudo apt-get install -y wget apt-transport-https software-properties-common
@@ -45,9 +63,13 @@ Plug in connector on the right-side Joy Con and connect to PC. Use WinDbg serial
 ## Clone Repositories
 - git clone https://github.com/fail0verflow/shofel2.git
 - git clone https://github.com/WolfLink115/Coreboot.git --recursive
-- git clone --branch edk2-stable202608 https://github.com/tianocore/edk2.git --recursive
-- git clone --branch stable202608 https://github.com/tianocore/edk2-platforms.git --recursive
+- git clone --branch edk2-stable202605 https://github.com/tianocore/edk2.git --recursive
+- git clone https://github.com/tianocore/edk2-platforms.git && git -C edk2-platforms checkout ae058185e12591a9a49e5895e90ca52936851973
 - copy this repository into the edk2 workspace as `NintendoSwitchPkg`
+
+`edk2-platforms` does not publish a matching `stable202605` branch/tag, so the
+GitHub Actions workflow and the manual instructions above pin the exact
+2026-05-22 commit that matches the validated workspace layout.
 
 ## Build ShofEL2 exploit, EDK2, and Coreboot
 - cd shofel2/exploit && make
