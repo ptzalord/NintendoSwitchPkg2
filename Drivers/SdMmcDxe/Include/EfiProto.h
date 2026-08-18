@@ -66,4 +66,14 @@ BioInstanceContructor(
     OUT BIO_INSTANCE** NewInstance
 );
 
+EFI_STATUS
+BioConfigureInstance (
+    IN OUT BIO_INSTANCE   *Instance,
+    IN UINT32             BlockSize,
+    IN UINT64             BlockCount,
+    IN BOOLEAN            RemovableMedia,
+    IN BOOLEAN            ReadOnly,
+    IN CONST EFI_GUID     *DevicePathGuid
+);
+
 #endif

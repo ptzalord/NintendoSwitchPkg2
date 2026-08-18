@@ -73,6 +73,29 @@ MMCHSReset(
     return EFI_SUCCESS;
 }
 
+EFI_STATUS
+BioConfigureInstance (
+    IN OUT BIO_INSTANCE   *Instance,
+    IN UINT32             BlockSize,
+    IN UINT64             BlockCount,
+    IN BOOLEAN            RemovableMedia,
+    IN BOOLEAN            ReadOnly,
+    IN CONST EFI_GUID     *DevicePathGuid
+)
+{
+    if ((Instance == NULL) || (DevicePathGuid == NULL) || (BlockSize == 0) || (BlockCount == 0)) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    Instance->BlockMedia.BlockSize = BlockSize;
+    Instance->BlockMedia.LastBlock = (EFI_LBA)(BlockCount - 1);
+    Instance->BlockMedia.RemovableMedia = RemovableMedia;
+    Instance->BlockMedia.ReadOnly = ReadOnly;
+    CopyMem (&Instance->DevicePath.Mmc.Guid, DevicePathGuid, sizeof (*DevicePathGuid));
+
+    return EFI_SUCCESS;
+}
+
 /*
  * Function: MmcReadInternal
  * Arg     : Data address on card, o/p buffer & data length
@@ -94,8 +117,9 @@ STATIC UINT32 MmcReadInternal
     UINT32 ReadSize;
     UINT8 *Sptr = (UINT8 *) Buf;
 
-    ASSERT(!(DataAddr % BlockSize));
-    ASSERT(!(DataLen % BlockSize));
+    if ((BlockSize == 0) || ((DataAddr % BlockSize) != 0) || ((DataLen % BlockSize) != 0)) {
+        return 0;
+    }
 
     /*
     * DMA onto write back memory is unsafe/nonportable,
@@ -178,43 +202,53 @@ MMCHSReadBlocks(
     BIO_INSTANCE              *Instance;
     EFI_BLOCK_IO_MEDIA        *Media;
     UINTN                     BlockSize;
+    UINTN                     NumBlocks;
     UINTN                     rc;
+    UINT64                    DataAddr;
 
     Instance  = BIO_INSTANCE_FROM_BLOCKIO_THIS(This);
     Media     = &Instance->BlockMedia;
     BlockSize = Media->BlockSize;
 
-    if (MediaId != Media->MediaId) 
-    {
+    if (MediaId != Media->MediaId) {
         return EFI_MEDIA_CHANGED;
     }
 
-    if (Lba > Media->LastBlock) 
-    {
-        return EFI_INVALID_PARAMETER;
-    }
-
-    if ((Lba + (BufferSize / BlockSize) - 1) > Media->LastBlock) 
-    {
-        return EFI_INVALID_PARAMETER;
-    }
-
-    if (BufferSize % BlockSize != 0) 
-    {
-        return EFI_BAD_BUFFER_SIZE;
-    }
-
-    if (Buffer == NULL) 
-    {
-        return EFI_INVALID_PARAMETER;
-    }
-
-    if (BufferSize == 0) 
-    {
+    if (BufferSize == 0) {
         return EFI_SUCCESS;
     }
 
-    rc = MmcReadInternal(Instance, (UINT64) Lba * BlockSize, Buffer, BufferSize);
+    if (Buffer == NULL) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    if (BlockSize == 0) {
+        return EFI_DEVICE_ERROR;
+    }
+
+    if (BufferSize % BlockSize != 0) {
+        return EFI_BAD_BUFFER_SIZE;
+    }
+
+    NumBlocks = BufferSize / BlockSize;
+    if (NumBlocks == 0) {
+        return EFI_SUCCESS;
+    }
+
+    if (Lba > Media->LastBlock) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    if (((EFI_LBA)(NumBlocks - 1)) > (Media->LastBlock - Lba)) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    if ((UINT64)Lba > (MAX_UINT64 / BlockSize)) {
+        return EFI_INVALID_PARAMETER;
+    }
+
+    DataAddr = (UINT64)Lba * BlockSize;
+    rc = MmcReadInternal(Instance, DataAddr, Buffer, BufferSize);
     if (rc == 1)
         return EFI_SUCCESS;
     else
@@ -231,6 +265,16 @@ MMCHSWriteBlocks(
     IN VOID                           *Buffer
 )
 {
+    BIO_INSTANCE       *Instance;
+    EFI_BLOCK_IO_MEDIA *Media;
+
+    Instance = BIO_INSTANCE_FROM_BLOCKIO_THIS (This);
+    Media = &Instance->BlockMedia;
+
+    if (Media->ReadOnly) {
+        return EFI_WRITE_PROTECTED;
+    }
+
     return EFI_UNSUPPORTED;
 }
 
