@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ "**" ]
 
+permissions:
+  contents: read
+
 jobs:
   validate-config:
     name: Validate DSC / DEC / FDF consistency
