@@ -72,20 +72,20 @@
  * All values in kHz unless otherwise noted.
  *---------------------------------------------------------------------------*/
 
-/* CPU (Denver + A57 cluster) – Tegra210 datasheet max is ~2.0 GHz on binned
- * silicon; we cap at 1.9 GHz to leave margin.  Values beyond this ceiling
+/* CPU (Denver + A57 cluster) – Tegra210 datasheet max is ~2.1 GHz on binned
+ * silicon; we cap at 2.091 GHz.  Values beyond this ceiling
  * are REJECTED unconditionally by the driver, even if a caller supplies them.
  */
 #define OC_CPU_FREQ_STOCK_KHZ    1020000UL   /* 1.020 GHz – factory default   */
 #define OC_CPU_FREQ_MILD_KHZ     1530000UL   /* 1.530 GHz – Mild OC profile    */
-#define OC_CPU_FREQ_AGGRESSIVE_KHZ 1785000UL /* 1.785 GHz – Aggressive profile */
-#define OC_CPU_FREQ_MAX_CEILING_KHZ 1900000UL /* HARD CEILING – never exceed   */
+#define OC_CPU_FREQ_AGGRESSIVE_KHZ 2073600UL /* 2.0736 GHz – Aggressive profile */
+#define OC_CPU_FREQ_MAX_CEILING_KHZ 2091000UL /* HARD CEILING – never exceed   */
 
 /* GPU – direct PLLC/GPCPLL programming from UEFI is not currently
  * implemented (see note above).  These constants document the intended
  * future limits only. */
 #define OC_GPU_FREQ_STOCK_KHZ    307200UL    /* 307.2 MHz – factory default   */
-#define OC_GPU_FREQ_MAX_CEILING_KHZ 768000UL /* HARD CEILING (future)         */
+#define OC_GPU_FREQ_MAX_CEILING_KHZ 998000UL /* HARD CEILING (future)         */
 
 /*---------------------------------------------------------------------------
  * Profile identifiers

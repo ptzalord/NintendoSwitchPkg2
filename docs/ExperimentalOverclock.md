@@ -36,13 +36,14 @@ silicon that does not match the known Erista T210 identifier (0x83).
 |------------|------|---------------|---------------|------------|
 | 0 | Stock | 1 020 MHz | 307 MHz (stock) | None – factory default |
 | 1 | Mild | 1 530 MHz | unchanged | Moderate |
-| 2 | Aggressive | 1 785 MHz | unchanged | High |
+| 2 | Aggressive | 2 073.6 MHz | unchanged | High |
 
 **Hard ceilings enforced in firmware (cannot be overridden):**
 
-* CPU: 1 900 MHz absolute maximum.  Any profile or future extension that
+* CPU: 2 091 MHz absolute maximum.  Any profile or future extension that
   would exceed this value is rejected unconditionally by the driver.
-* GPU: direct GPCPLL programming from UEFI firmware is not currently
+* GPU: 998 MHz absolute maximum for future support, but direct GPCPLL
+  programming from UEFI firmware is not currently
   implemented; GPU frequency remains at bootloader-configured stock value
   regardless of profile selection.
 
@@ -97,13 +98,15 @@ Setting an unrecognised value (> 2) also results in no change.
 1. Check `PcdExperimentalOverclockEnable`; exit immediately if `FALSE`.
 2. Read the runtime UEFI variable; exit if absent or invalid.
 3. Read `FUSE_SKU_INFO`; refuse if silicon is not Erista T210.
-4. Validate the requested CPU frequency against the hard ceiling (1 900 MHz).
+4. Validate the requested CPU frequency against the hard ceiling (2 091 MHz).
 5. Attempt PLLC reprogramming with the pre-calculated M/N/P values.
 6. On any failure: roll back to stock PLLC parameters and return.
 7. Log a prominent warning confirming which profile was applied.
 
 The driver **does not**:
 * Silently raise CPU/GPU voltage.
+* Program GPU clocks despite the documented future GPU ceiling.
+* Program RAM/EMC clocks or set a default 2131 MHz RAM overclock.
 * Disable thermal throttling or shutdown.
 * Expose arbitrary MMIO/register-write interfaces.
 * Auto-reapply the overclock after a failed or watchdog-reset boot.

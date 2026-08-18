@@ -20,11 +20,11 @@ import os
 
 OC_CPU_FREQ_STOCK_KHZ       = 1_020_000
 OC_CPU_FREQ_MILD_KHZ        = 1_530_000
-OC_CPU_FREQ_AGGRESSIVE_KHZ  = 1_785_000
-OC_CPU_FREQ_MAX_CEILING_KHZ = 1_900_000
+OC_CPU_FREQ_AGGRESSIVE_KHZ  = 2_073_600
+OC_CPU_FREQ_MAX_CEILING_KHZ = 2_091_000
 
 OC_GPU_FREQ_STOCK_KHZ       = 307_200
-OC_GPU_FREQ_MAX_CEILING_KHZ = 768_000
+OC_GPU_FREQ_MAX_CEILING_KHZ = 998_000
 
 T210_SKU_ID_ERISTA = 0x83
 
@@ -37,7 +37,7 @@ OcProfileMax        = OcProfileAggressive
 PLLC_PARAMS = {
     OcProfileStock:      {"cpu_freq_khz": OC_CPU_FREQ_STOCK_KHZ,       "M": 1, "N": 53, "P": 2},
     OcProfileMild:       {"cpu_freq_khz": OC_CPU_FREQ_MILD_KHZ,        "M": 1, "N": 40, "P": 1},
-    OcProfileAggressive: {"cpu_freq_khz": OC_CPU_FREQ_AGGRESSIVE_KHZ,  "M": 1, "N": 46, "P": 1},
+    OcProfileAggressive: {"cpu_freq_khz": OC_CPU_FREQ_AGGRESSIVE_KHZ,  "M": 1, "N": 54, "P": 1},
 }
 
 OSC_FREQ_KHZ = 38_400  # 38.4 MHz oscillator input on Erista Switch
