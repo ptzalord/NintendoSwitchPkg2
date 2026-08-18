@@ -131,7 +131,7 @@ EnableI2c
     IN UINT32 DeviceIndex
 )
 {
-    if (DeviceIndex < 0 || DeviceIndex > 5) return EFI_INVALID_PARAMETER;
+    if (DeviceIndex > 5) return EFI_INVALID_PARAMETER;
     clock_enable_i2c(DeviceIndex);
     return EFI_SUCCESS; 
 }
@@ -144,7 +144,7 @@ EnableUart
     IN UINT32 DeviceIndex
 )
 {
-    if (DeviceIndex < 0 || DeviceIndex > 4) return EFI_INVALID_PARAMETER;
+    if (DeviceIndex > 4) return EFI_INVALID_PARAMETER;
     clock_enable_uart(DeviceIndex);
     return EFI_SUCCESS; 
 }
@@ -223,16 +223,6 @@ ClockManagementDxeInitialize
 {
     EFI_STATUS Status;
     EFI_HANDLE ProtoHandle = NULL;
-
-    {
-      volatile UINT32  *DebugFb = (volatile UINT32 *)0xdfb80000;
-      UINTN             DebugFbIndex;
-
-      /* Bring-up debug: ClockManagementDxe entry */
-      for (DebugFbIndex = 0; DebugFbIndex < 720UL * 1280UL; DebugFbIndex++) {
-        DebugFb[DebugFbIndex] = 0xFF008080; /* TEAL */
-      }
-    }
 
     UbInitialize();
 

@@ -429,8 +429,8 @@ void tegra_mmc_change_clock(struct tegra_mmc_priv *priv, uint clock)
 	 * Change Tegra SDMMCx clock divisor here. Source is PLLP_OUT0
 	 */
 	if (clock == 0) goto out;
-    
-	rate = mClkProtocol->SetRate(PERIPH_ID_SDMMC1, clock);
+
+	rate = mClkProtocol->SetRate(priv->periph_id, clock);
 	div = (rate + clock - 1) / clock;
 	debug("div = %d\n", div);
 
@@ -642,6 +642,7 @@ SdControllerProbe
 
     // sdhci@700b0000
     mPriv.reg = (VOID*) (UINTN) 0x700b0000;
+    mPriv.periph_id = PERIPH_ID_SDMMC1;
 
     // Reset controller 1, &tegra_car 14
     mClkProtocol->AssertRst(PERIPH_ID_SDMMC1);
@@ -685,16 +686,6 @@ SdMmcDxeInitialize
 {
     EFI_STATUS Status;
 	BIO_INSTANCE *Instance;
-
-    {
-      volatile UINT32  *DebugFb = (volatile UINT32 *)0xdfb80000;
-      UINTN             DebugFbIndex;
-
-      /* Bring-up debug: SdMmcDxe entry */
-      for (DebugFbIndex = 0; DebugFbIndex < 720UL * 1280UL; DebugFbIndex++) {
-        DebugFb[DebugFbIndex] = 0xFF808000; /* OLIVE */
-      }
-    }
 
     Status = gBS->LocateProtocol(
         &gTegraUBootClockManagementProtocolGuid,
@@ -758,8 +749,9 @@ SdMmcDxeInitialize
 
 		if (!FoundMbr)
 		{
-			DEBUG((EFI_D_ERROR, "(Protective) MBR not found \n"));
-			CpuDeadLoop();
+			DEBUG((EFI_D_ERROR, "SdMmcDxe: (Protective) MBR not found on SD card\n"));
+			Status = EFI_NOT_FOUND;
+			goto exit;
 		}
 		
 		// Install EFI protocol
