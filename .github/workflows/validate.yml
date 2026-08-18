@@ -2,7 +2,7 @@ name: Host-side Validation
 
 on:
   push:
-    branches: [ "**" ]
+    branches: [ "master" ]
   pull_request:
     branches: [ "**" ]
   workflow_dispatch:
@@ -121,28 +121,35 @@ jobs:
           ARTIFACT_ROOT="${RUNNER_TEMP}/nintendoswitchpkg-artifacts"
           mkdir -p "${ARTIFACT_ROOT}"
           LOG_FILE="${ARTIFACT_ROOT}/full-edk2-aarch64-build.log"
-
-          cd "${WORK_ROOT}/edk2"
-          source edksetup.sh
-          make -C BaseTools -j"$(nproc)"
-
-          export PACKAGES_PATH="${WORK_ROOT}/edk2:${WORK_ROOT}/edk2-platforms"
-          export GCC5_AARCH64_PREFIX="aarch64-linux-gnu-"
+          : > "${LOG_FILE}"
 
           set +e
-          build -a AARCH64 -t GCC5 -p NintendoSwitchPkg/NintendoSwitch.dsc 2>&1 | tee "${LOG_FILE}"
+          (
+            set -euo pipefail
+            cd "${WORK_ROOT}/edk2"
+            export PYTHON_COMMAND=python3
+            export PACKAGES_PATH="${WORK_ROOT}/edk2:${WORK_ROOT}/edk2-platforms"
+            export GCC5_AARCH64_PREFIX="aarch64-linux-gnu-"
+
+            echo "==> source edksetup.sh"
+            source edksetup.sh
+            echo "==> make -C BaseTools -j$(nproc)"
+            make -C BaseTools -j"$(nproc)"
+            echo "==> build -a AARCH64 -t GCC5 -p NintendoSwitchPkg/NintendoSwitch.dsc"
+            build -a AARCH64 -t GCC5 -p NintendoSwitchPkg/NintendoSwitch.dsc
+          ) 2>&1 | tee -a "${LOG_FILE}"
           build_status=${PIPESTATUS[0]}
           set -e
 
           if [ "${build_status}" -ne 0 ]; then
-            first_error_line="$(grep -Einm1 '\bfatal error\b|:\s*error\b|\berror:\b|^[[:space:]]*ERROR\b' "${LOG_FILE}" | cut -d: -f1 || true)"
+            first_error_line="$(grep -Einm1 '\bfatal error\b|:\s*error\b|\berror:\b|^[[:space:]]*ERROR\b|unbound variable|No rule to make target|^Traceback \(most recent call last\):|^make: \*\*\*' "${LOG_FILE}" | cut -d: -f1 || true)"
             if [ -n "${first_error_line}" ]; then
               start_line=$(( first_error_line > 5 ? first_error_line - 5 : 1 ))
               end_line=$(( first_error_line + 15 ))
               echo "::group::First build error context"
               sed -n "${start_line},${end_line}p" "${LOG_FILE}" | nl -ba -v "${start_line}"
               echo "::endgroup::"
-              echo "::error title=First build/compiler error::$(sed -n "${first_error_line}p" "${LOG_FILE}")"
+              echo "::error title=First setup/build error::$(sed -n "${first_error_line}p" "${LOG_FILE}")"
             else
               echo "::error title=EDK2 build failed::Build failed without a matched error pattern; inspect the full build log artifact."
             fi
