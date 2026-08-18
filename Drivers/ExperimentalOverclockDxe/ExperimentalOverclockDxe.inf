@@ -1,0 +1,46 @@
+# ExperimentalOverclockDxe.inf
+#
+# EXPERIMENTAL / UNSAFE OVERCLOCKING SUPPORT FOR ERISTA (TEGRA210 / HAC-001)
+#
+# WARNING: This driver is EXPERIMENTAL and UNSAFE.  Compiling this driver
+# into the firmware image does NOT activate overclocking by itself.  A
+# separate, explicit runtime UEFI variable must be set by the user before
+# each boot.  See docs/ExperimentalOverclock.md.
+#
+# Copyright (c) 2024, NintendoSwitchPkg2 Contributors. All rights reserved.
+# SPDX-License-Identifier: BSD-2-Clause-Patent
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = ExperimentalOverclockDxe
+  FILE_GUID                      = 4a7f1e3c-bc22-4d89-9f0a-12e847a6c5d1
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = ExperimentalOverclockDxeInitialize
+
+[Sources.common]
+  ExperimentalOverclockDxe.c
+
+[Packages]
+  ArmPkg/ArmPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  NintendoSwitchPkg/NintendoSwitch.dec
+
+[LibraryClasses]
+  BaseLib
+  BaseMemoryLib
+  DebugLib
+  IoLib
+  PcdLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+  UefiLib
+  UefiRuntimeServicesTableLib
+
+[FixedPcd]
+  gNintendoSwitchPkgTokenSpaceGuid.PcdExperimentalOverclockEnable
+
+[Depex]
+  gEfiVariableArchProtocolGuid
