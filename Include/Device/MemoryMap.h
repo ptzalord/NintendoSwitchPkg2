@@ -109,7 +109,7 @@ static ARM_MEMORY_REGION_DESCRIPTOR_EX gDeviceMemoryDescriptorEx[] =
 		EFI_RESOURCE_ATTRIBUTE_WRITE_THROUGH_CACHEABLE, 
 		ARM_MEMORY_REGION_ATTRIBUTE_WRITE_THROUGH, 
 		AddMem, 
-		EfiMaxMemoryType
+		EfiReservedMemoryType
 	},
 	{
 		// HLOS memory 5

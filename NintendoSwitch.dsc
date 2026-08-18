@@ -252,7 +252,6 @@
   gEfiMdeModulePkgTokenSpaceGuid.PcdBootManagerMenuFile|{ 0x21, 0xaa, 0x2c, 0x46, 0x14, 0x76, 0x03, 0x45, 0x83, 0x6e, 0x8a, 0xb6, 0xf4, 0x66, 0x23, 0x31 }
   gEfiMdePkgTokenSpaceGuid.PcdPlatformBootTimeOut|3
 
-  gEfiMdeModulePkgTokenSpaceGuid.PcdFirmwareVendor|L"Nintendo Switch AArch64 UEFI"
   # According to TRM
   # This no longer presents. Just know it is sufficient.
   # gEmbeddedTokenSpaceGuid.PcdPrePiCpuMemorySize|34
@@ -279,10 +278,6 @@
   # ACPI predates the AARCH64 architecture by 5 versions, so
   # we only target OSes that support ACPI v5.0 or later
   gEfiMdeModulePkgTokenSpaceGuid.PcdAcpiExposedTableVersions|0x20
-
-  ## If TRUE, Graphics Output Protocol will be installed on virtual handle created by ConsplitterDxe.
-  #  It could be set FALSE to save size.
-  gEfiMdeModulePkgTokenSpaceGuid.PcdConOutGopSupport|TRUE
 
   # Debug Configuration
   gEfiMdePkgTokenSpaceGuid.PcdDebugPropertyMask|0x2f
@@ -324,6 +319,9 @@
 
   # TrustZone carveout, 14MB below slot 1 top
   gNintendoSwitchPkgTokenSpaceGuid.PcdTrustZoneCarveoutSize|0xe00000
+
+  # Experimental unsafe overclocking.  Default FALSE; see docs/ExperimentalOverclock.md.
+  gNintendoSwitchPkgTokenSpaceGuid.PcdExperimentalOverclockEnable|FALSE
 
   #
   # Make VariableRuntimeDxe work at emulated non-volatile variable mode.
@@ -398,6 +396,9 @@
   NintendoSwitchPkg/Drivers/SidebandButtonDxe/SidebandButtonDxe.inf
   NintendoSwitchPkg/Drivers/ClockManagementDxe/ClockManagementDxe.inf
   NintendoSwitchPkg/Drivers/PmicDxe/PmicDxe.inf
+  # Experimental unsafe overclocking – only included when opted in at build time.
+  # WARNING: Can cause hardware damage.  See docs/ExperimentalOverclock.md.
+  NintendoSwitchPkg/Drivers/ExperimentalOverclockDxe/ExperimentalOverclockDxe.inf
   NintendoSwitchPkg/Drivers/SdMmcDxe/SdMmcDxe.inf
   NintendoSwitchPkg/Drivers/PinMuxDxe/PinMuxDxe.inf
   # USB EHCI PHY init for Tegra210
