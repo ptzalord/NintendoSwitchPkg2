@@ -133,9 +133,9 @@ OcCheckSiliconRevision (
  *
  * Stock:      38.4 * 53 /  2 = 1017.6 ≈ 1020 MHz  (P=2,  N=53)
  * Mild:       38.4 * 40 /  1 = 1536   ≈ 1530 MHz  (P=1,  N=40)
- * Aggressive: 38.4 * 46 /  1 = 1766.4 ≈ 1785 MHz  (P=1,  N=46)
+ * Aggressive: 38.4 * 54 /  1 = 2073.6 ≈ 2074 MHz  (P=1,  N=54)
  *
- * All values are within the hard ceiling of 1900 MHz.
+ * All values are within the hard ceiling of 2091 MHz.
  */
 typedef struct {
   UINT32  CpuFreqKHz;    /**< Target CPU frequency (for bound check only)  */
@@ -151,7 +151,7 @@ STATIC CONST OC_PLLC_PARAMS mPllcParams[OcProfileMax + 1] = {
   /* OcProfileMild */
   { OC_CPU_FREQ_MILD_KHZ,       1, 40, 1 },
   /* OcProfileAggressive */
-  { OC_CPU_FREQ_AGGRESSIVE_KHZ, 1, 46, 1 },
+  { OC_CPU_FREQ_AGGRESSIVE_KHZ, 1, 54, 1 },
 };
 
 /**
