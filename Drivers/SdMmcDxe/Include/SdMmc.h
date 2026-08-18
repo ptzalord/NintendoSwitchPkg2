@@ -136,6 +136,7 @@ struct tegra_mmc_priv {
 	struct tegra_mmc *reg;
 	unsigned int version;	/* SDHCI spec. version */
 	unsigned int clock;	    /* Current clock (MHz) */
+	int periph_id;          /* Clock/reset peripheral ID (PERIPH_ID_SDMMCx) */
 };
 
 #endif

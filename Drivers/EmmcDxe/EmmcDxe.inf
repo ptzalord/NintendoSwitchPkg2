@@ -1,0 +1,70 @@
+# EmmcDxe.inf — Internal eMMC (SDMMC2) block-I/O driver
+#
+# Drives the Nintendo Switch internal eMMC connected to Tegra210 SDMMC2
+# (MMIO base 0x700b0200, PERIPH_ID_SDMMC2).
+#
+# This is a separate binary from SdMmcDxe.  By compiling the shared MMC
+# source files into this INF, the resulting EmmcDxe.efi has its own private
+# copy of all MMC globals (mMmcInstance, mPriv, mBlkDesc, mConfig), so the
+# SD card and eMMC paths do not interfere with each other at runtime.
+#
+# Copyright (c) 2024, NintendoSwitchPkg2 Contributors. All rights reserved.
+# SPDX-License-Identifier: BSD-2-Clause-Patent
+
+[Defines]
+  INF_VERSION                    = 0x00010005
+  BASE_NAME                      = EmmcDxe
+  FILE_GUID                      = 3b8f2e47-a1d5-4c09-8e62-7f4b3a91c5d0
+  MODULE_TYPE                    = DXE_DRIVER
+  VERSION_STRING                 = 1.0
+  ENTRY_POINT                    = EmmcDxeInitialize
+
+[Sources.common]
+  EmmcDxe.c
+  # Re-use low-level MMC sources from SdMmcDxe.
+  # Each binary gets its own data segment, so the globals in SdMmc.c are
+  # private to this binary and configured for SDMMC2 by EmmcDxe.c.
+  ../SdMmcDxe/SdMmc.c
+  ../SdMmcDxe/MmcHostOp.c
+  ../SdMmcDxe/EfiBlkDeviceOp.c
+
+[Packages]
+  ArmPkg/ArmPkg.dec
+  MdePkg/MdePkg.dec
+  MdeModulePkg/MdeModulePkg.dec
+  EmbeddedPkg/EmbeddedPkg.dec
+  NintendoSwitchPkg/NintendoSwitch.dec
+
+[LibraryClasses]
+  ArmLib
+  BaseLib
+  BaseMemoryLib
+  CacheMaintenanceLib
+  CompilerIntrinsicsLib
+  DebugLib
+  ClockLib
+  DmaBounceBufferLib
+  EarlyTimerLib
+  GpioLib
+  I2cLib
+  IoLib
+  Max7762xPmicLib
+  PcdLib
+  ReportStatusCodeLib
+  TimerLib
+  UefiBootServicesTableLib
+  UefiDriverEntryPoint
+  UefiLib
+
+[BuildOptions.AARCH64]
+  GCC:*_*_*_CC_FLAGS = -Wno-unused-function -Wno-unused-variable
+
+[Protocols]
+  gTegraUBootClockManagementProtocolGuid
+  gPmicProtocolGuid
+  gEfiBlockIoProtocolGuid
+  gEfiDevicePathProtocolGuid
+
+[Depex]
+  gTegraUBootClockManagementProtocolGuid AND
+  gPmicProtocolGuid
