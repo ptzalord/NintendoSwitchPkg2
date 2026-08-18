@@ -50,5 +50,12 @@
   # Carveout information
   gNintendoSwitchPkgTokenSpaceGuid.PcdTrustZoneCarveoutSize|0|UINT64|0x0000a404
 
+  # Experimental unsafe overclocking (Erista / Tegra210 only).
+  # Defaults to FALSE.  Must be explicitly set TRUE at build time to compile
+  # the ExperimentalOverclockDxe driver.  A separate runtime UEFI variable
+  # (NintendoSwitchOcProfile) is ALSO required before overclocking activates.
+  # WARNING: Enabling this can cause hardware damage.  See docs/ExperimentalOverclock.md.
+  gNintendoSwitchPkgTokenSpaceGuid.PcdExperimentalOverclockEnable|FALSE|BOOLEAN|0x0000a500
+
 [PcdsDynamic]
   gNintendoSwitchPkgTokenSpaceGuid.PcdDynamicStub|0|UINT64|0x0001a400
