@@ -43,6 +43,11 @@ MMC_CONFIG mConfig;
 TEGRA_MMC_PRIV mPriv;
 struct mmc mMmcInstance;
 struct blk_desc mBlkDesc;
+BOOLEAN mForceMmcOnlyInit = FALSE;
+
+STATIC CONST EFI_GUID gSdMmcBlockIoDevicePathGuid = {
+	0x7e3108d3, 0x3849, 0x49aa, { 0x9d, 0x69, 0xdc, 0x51, 0xc3, 0x2e, 0x80, 0x31 }
+};
 
 void tegra_mmc_set_power(
     struct tegra_mmc_priv *priv,
@@ -754,14 +759,22 @@ SdMmcDxeInitialize
 			goto exit;
 		}
 		
-		// Install EFI protocol
-		ASSERT(mBlkDesc.lba != 0);
-		ASSERT(mBlkDesc.blksz != 0);
 		Status = BioInstanceContructor(&Instance);
 		if (EFI_ERROR(Status)) goto exit;
 
-		Instance->BlockMedia.BlockSize = mBlkDesc.blksz;
-		Instance->BlockMedia.LastBlock = mBlkDesc.lba;
+		Status = BioConfigureInstance(
+			Instance,
+			(UINT32)mBlkDesc.blksz,
+			(UINT64)mBlkDesc.lba,
+			TRUE,
+			TRUE,
+			&gSdMmcBlockIoDevicePathGuid
+		);
+		if (EFI_ERROR(Status))
+		{
+			FreePool(Instance);
+			goto exit;
+		}
 		Status = gBS->InstallMultipleProtocolInterfaces(
 			&Instance->Handle,
 			&gEfiBlockIoProtocolGuid,    
@@ -770,6 +783,11 @@ SdMmcDxeInitialize
 			&Instance->DevicePath,
 			NULL
 		);
+		if (EFI_ERROR(Status))
+		{
+			FreePool(Instance);
+			goto exit;
+		}
 	}
 
 exit:

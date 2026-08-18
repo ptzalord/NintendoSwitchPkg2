@@ -2,3 +2,5 @@ Include/FwReleaseInfo.h
 Tools/grubaa64.efi
 AcpiTables/T114Ref.asl
 .vscode
+__pycache__/
+*.py[cod]
